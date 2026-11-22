@@ -58,4 +58,167 @@ if ('IntersectionObserver' in window && !matchMedia('(prefers-reduced-motion: re
   }, {threshold: .15});
   document.querySelectorAll('.timeline details, .cards article, .study article').forEach(item => observer.observe(item));
 }
-</script></body></html>
+</script>
+<style id="editor-style">
+.editor-entry{padding:16px 0;background:var(--pink)}.editor-entry .wrap{display:flex;align-items:center;gap:14px;flex-wrap:wrap}#portfolio-editor{width:min(660px,calc(100% - 24px));max-height:88vh;border:1px solid var(--line);border-radius:18px;padding:22px;background:var(--paper);color:var(--ink)}#portfolio-editor::backdrop{background:#301822a0}#portfolio-editor h2{font-size:2.3rem}#portfolio-editor fieldset{border:1px solid var(--line);border-radius:10px;margin:16px 0;padding:14px}#portfolio-editor label{display:block;margin-bottom:12px;font-weight:600}#portfolio-editor input,#portfolio-editor textarea{display:block;width:100%;font:inherit;margin-top:4px;padding:8px;border:1px solid #aa8493;border-radius:6px;background:white;color:var(--ink)}#portfolio-editor textarea{min-height:76px;resize:vertical}#portfolio-editor button,.editor-entry button{cursor:pointer}
+</style>
+<aside class="editor-entry" id="editor-entry" hidden><div class="wrap"><button type="button" class="button" id="open-editor">Edit isi portofolio</button><span>Mode edit lokal</span></div></aside>
+<dialog id="portfolio-editor" aria-labelledby="editor-heading">
+<form id="portfolio-fields">
+<h2 id="editor-heading">Edit portofolio</h2>
+<p>Ubah kolom yang diperlukan, lalu klik Terapkan untuk melihat hasilnya.</p>
+<div id="editor-groups"></div>
+<div class="actions"><button class="button" type="submit">Terapkan</button><button class="button secondary" id="close-editor" type="button">Batal</button></div>
+<p id="editor-message" role="status"></p>
+</form>
+</dialog>
+<script id="editor-script">
+if (location.protocol === 'file:') {
+  const entry = document.querySelector('#editor-entry');
+  const dialog = document.querySelector('#portfolio-editor');
+  const form = document.querySelector('#portfolio-fields');
+  const groups = document.querySelector('#editor-groups');
+  const portrait = document.querySelector('.portrait img');
+  const emailLink = document.querySelector('#kontak a[href^="mailto:"]');
+  const config = [
+    ['Profil', [['.hero h1', 'Nama (dua baris)', true], ['.hero .label', 'Jabatan'], ['.hero-copy p:not(.label)', 'Perkenalan'], ['.location', 'Lokasi'], ['#tentang p:not(.label)', 'Tentang saya']]],
+    ['Pencapaian', [['.stats dt, .stats dd', 'Angka atau keterangan']]],
+    ['Pengalaman kerja', [['.timeline summary strong', 'Perusahaan'], ['.timeline summary span', 'Jabatan dan periode'], ['.timeline ul', 'Tanggung jawab (satu poin per baris)', true]]],
+    ['Keahlian', [['.cards h3', 'Judul keahlian'], ['.cards p', 'Deskripsi']]],
+    ['Pendidikan, sertifikasi, dan organisasi', [['.study h3', 'Judul'], ['.study p', 'Keterangan'], ['.study ul', 'Sertifikasi (satu poin per baris)', true]]],
+    ['Kontak', [['#kontak h2', 'Judul'], ['#kontak p', 'Pesan kontak']]]
+  ];
+  const fields = [];
+  const createField = (container, title, value, kind) => {
+    const label = document.createElement('label');
+    label.textContent = title;
+    const input = document.createElement(kind === 'textarea' ? 'textarea' : 'input');
+    if (kind !== 'textarea') input.type = kind;
+    if (kind !== 'file') input.value = value;
+    label.append(input);
+    container.append(label);
+    return input;
+  };
+  document.querySelector('#open-editor').onclick = () => {
+    groups.replaceChildren();
+    fields.length = 0;
+    for (const [title, selectors] of config) {
+      const group = document.createElement('fieldset');
+      const heading = document.createElement('legend');
+      heading.textContent = title;
+      group.append(heading);
+      groups.append(group);
+      for (const [selector, title, multiline] of selectors) {
+        const nodes = document.querySelectorAll(selector);
+        nodes.forEach((node, index) => {
+          let current = node.textContent;
+          if (node.tagName === 'UL') current = Array.from(node.children, item => item.textContent).join('\n');
+          if (node.tagName === 'H1') current = node.innerText;
+          const label = nodes.length > 1 ? title + ' ' + (index + 1) : title;
+          fields.push([node, createField(group, label, current, multiline || node.tagName === 'P' ? 'textarea' : 'text')]);
+        });
+      }
+    }
+    const email = createField(groups, 'Alamat email', emailLink.getAttribute('href').slice(7), 'email');
+    email.required = true;
+    email.id = 'editor-email';
+    const photo = createField(groups, 'Ganti foto (opsional)', '', 'file');
+    photo.id = 'editor-photo';
+    photo.accept = 'image/png,image/jpeg,image/webp';
+    document.querySelector('#editor-message').textContent = '';
+    dialog.showModal();
+  };
+  document.querySelector('#close-editor').onclick = () => dialog.close();
+  entry.hidden = false;
+  entry.style.display = 'block';
+  const addDownload = (label, name, editable) => {
+    const button = document.createElement('button');
+    button.className = 'button secondary';
+    button.type = 'button';
+    button.textContent = label;
+    button.onclick = () => {
+      const page = document.documentElement.cloneNode(true);
+      const nav = page.querySelector('#nav');
+      nav.removeAttribute('hidden');
+      page.querySelector('.menu').setAttribute('aria-expanded', 'false');
+      page.querySelectorAll('.revealed').forEach(node => node.classList.remove('revealed'));
+      page.querySelectorAll('.timeline details').forEach((node, index) => node.open = index === 0);
+      const copy = page.querySelector('#editor-entry');
+      copy.hidden = true;
+      copy.removeAttribute('style');
+      copy.querySelectorAll('button + button').forEach(node => node.remove());
+      page.querySelector('#portfolio-editor').removeAttribute('open');
+      page.querySelector('#editor-groups').replaceChildren();
+      page.querySelector('#editor-message').textContent = '';
+      if (!editable) for (const id of ['editor-entry','portfolio-editor','editor-style','editor-script']) page.querySelector('#' + id).remove();
+      const url = URL.createObjectURL(new Blob(['<!doctype html>\n', page.outerHTML], {type: 'text/html;charset=utf-8'}));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    };
+    entry.querySelector('.wrap').insertBefore(button, entry.querySelector('span'));
+  };
+  addDownload('Unduh versi edit', 'Portofolio_Dita_Editable.html', true);
+  addDownload('Unduh untuk GitHub', 'index.html', false);
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const message = document.querySelector('#editor-message');
+    const chosen = document.querySelector('#editor-photo').files[0];
+    const email = document.querySelector('#editor-email').value.trim();
+    if (chosen && (!['image/png','image/jpeg','image/webp'].includes(chosen.type) || chosen.size > 5 * 1024 * 1024)) {
+      message.textContent = 'Pilih foto PNG, JPG, atau WebP dengan ukuran maksimal 5 MB.';
+      return;
+    }
+    submit.disabled = true;
+    try {
+      if (chosen) {
+        const source = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(chosen);
+        });
+        const check = new Image();
+        check.src = source;
+        await check.decode();
+        portrait.src = source;
+      }
+      for (const [node, input] of fields) {
+        const value = input.value.trim();
+        if (node.tagName === 'UL') {
+          node.replaceChildren(...value.split('\n').filter(line => line.trim()).map(line => {
+            const item = document.createElement('li');
+            item.textContent = line.trim();
+            return item;
+          }));
+        } else if (node.tagName === 'H1') {
+          const [first, ...rest] = value.split(/\n+/);
+          const last = document.createElement('em');
+          last.textContent = rest.join(' ');
+          node.replaceChildren(first);
+          if (rest.length) node.append(document.createElement('br'), last);
+          const name = [first, ...rest].join(' ');
+          document.title = name + ' — Portofolio';
+          document.querySelector('.brand').textContent = name;
+          document.querySelector('.portrait figcaption').textContent = name;
+          document.querySelector('.monogram').textContent = name.split(/\s+/).slice(0, 2).map(word => word[0] || '').join('');
+          portrait.alt = 'Foto ' + name;
+          document.querySelector('footer span').textContent = '© ' + name;
+          document.querySelector('meta[name="description"]').content = 'Portofolio ' + name;
+        } else node.textContent = value;
+      }
+      emailLink.href = 'mailto:' + email;
+      dialog.close();
+      entry.querySelector('span').textContent = 'Perubahan diterapkan. Unduh hasilnya untuk menyimpan.';
+    } catch {
+      message.textContent = 'Foto tidak bisa dibuka. Pilih file gambar lain.';
+    } finally {
+      submit.disabled = false;
+    }
+  };
+}
+</script>
+</body></html>
